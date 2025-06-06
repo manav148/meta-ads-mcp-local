@@ -90,11 +90,12 @@ async def get_login_link(access_token: str = None) -> str:
         # IMPORTANT: Start the callback server first by calling our helper function
         # This ensures the server is ready before we provide the URL to the user
         logger.info("Starting callback server for authentication")
-        port = start_callback_server()
-        logger.info(f"Callback server started on port {port}")
+        port, is_https = start_callback_server()
+        protocol = "https" if is_https else "http"
+        logger.info(f"Callback server started on {protocol}://localhost:{port}")
         
         # Generate direct login URL
-        auth_manager.redirect_uri = f"http://localhost:{port}/callback"  # Ensure port is set correctly
+        auth_manager.redirect_uri = f"{protocol}://localhost:{port}/callback"  # Ensure port is set correctly
         logger.info(f"Setting redirect URI to {auth_manager.redirect_uri}")
         login_url = auth_manager.get_auth_url()
         logger.info(f"Generated login URL: {login_url}")
@@ -107,7 +108,7 @@ async def get_login_link(access_token: str = None) -> str:
         response = {
             "login_url": login_url,
             "token_status": token_status,
-            "server_status": f"Callback server running on port {port}",
+            "server_status": f"Callback server running on {protocol}://localhost:{port}",
             "markdown_link": f"[Click here to authenticate with Meta Ads]({login_url})",
             "message": "IMPORTANT: Please use the Markdown link format in your response to allow the user to click it.",
             "instructions_for_llm": "You must present this link as clickable Markdown to the user using the markdown_link format provided.",

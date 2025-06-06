@@ -216,10 +216,11 @@ class AuthManager:
             return self.token_info.access_token
         
         # Start the callback server if not already running
-        port = start_callback_server()
+        port, is_https = start_callback_server()
         
-        # Update redirect URI with the actual port
-        self.redirect_uri = f"http://localhost:{port}/callback"
+        # Update redirect URI with the actual port and protocol
+        protocol = "https" if is_https else "http"
+        self.redirect_uri = f"{protocol}://localhost:{port}/callback"
         
         # Generate the auth URL
         auth_url = self.get_auth_url()
@@ -477,7 +478,7 @@ def login():
     
     try:
         # Start the callback server first
-        port = start_callback_server()
+        port, is_https = start_callback_server()
         
         # Get the auth URL and open the browser
         auth_url = auth_manager.get_auth_url()

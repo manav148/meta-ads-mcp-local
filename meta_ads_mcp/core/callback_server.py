@@ -7,6 +7,8 @@ import json
 import logging
 import webbrowser
 import os
+import ssl
+import tempfile
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, quote
 from typing import Dict, Any, Optional
@@ -29,6 +31,46 @@ server_shutdown_timer = None
 
 # Timeout in seconds before shutting down the callback server
 CALLBACK_SERVER_TIMEOUT = 180  # 3 minutes timeout
+
+def create_ssl_context():
+    """Create a self-signed SSL certificate for localhost HTTPS"""
+    try:
+        # Try to create self-signed certificate
+        import subprocess
+        import platform
+        
+        # Create temporary directory for certificates
+        cert_dir = tempfile.mkdtemp()
+        cert_file = os.path.join(cert_dir, "localhost.crt")
+        key_file = os.path.join(cert_dir, "localhost.key")
+        
+        # Generate private key and certificate
+        if platform.system() == "Darwin":  # macOS
+            # Use openssl to create self-signed certificate
+            subprocess.run([
+                "openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout", key_file,
+                "-out", cert_file, "-days", "365", "-nodes", "-subj",
+                "/C=US/ST=CA/L=LocalHost/O=MetaAds/OU=Development/CN=localhost"
+            ], check=True, capture_output=True)
+        else:
+            # For other systems, try the same approach
+            subprocess.run([
+                "openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout", key_file,
+                "-out", cert_file, "-days", "365", "-nodes", "-subj",
+                "/C=US/ST=CA/L=LocalHost/O=MetaAds/OU=Development/CN=localhost"
+            ], check=True, capture_output=True)
+        
+        # Create SSL context
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain(cert_file, key_file)
+        
+        logger.info(f"Created SSL certificate: {cert_file}")
+        return context, cert_dir
+        
+    except Exception as e:
+        logger.warning(f"Failed to create SSL certificate: {e}")
+        logger.info("Falling back to HTTP - you may need to use Meta app development mode")
+        return None, None
 
 
 class CallbackHandler(BaseHTTPRequestHandler):
@@ -911,12 +953,15 @@ def shutdown_callback_server():
         else:
             print("No server instance to shut down")
 
-def start_callback_server() -> int:
+def start_callback_server(use_https: bool = True) -> tuple[int, bool]:
     """
     Start the callback server if it's not already running
     
+    Args:
+        use_https: Whether to attempt to use HTTPS (defaults to True)
+    
     Returns:
-        Port number the server is running on
+        Tuple of (port number, is_https) where is_https indicates if HTTPS was successfully enabled
     """
     global callback_server_thread, callback_server_running, callback_server_port, callback_server_instance, server_shutdown_timer
     
@@ -933,10 +978,25 @@ def start_callback_server() -> int:
             server_shutdown_timer.start()
             print(f"Reset server shutdown timer to {CALLBACK_SERVER_TIMEOUT} seconds")
             
-            return callback_server_port
+            # Return existing port and assume HTTPS if port is in typical HTTPS range
+            return callback_server_port, callback_server_port == 8443
+        
+        # Try HTTPS first (port 8443), then fall back to HTTP (port 8888+)
+        ssl_context = None
+        cert_dir = None
+        is_https = False
+        
+        if use_https:
+            ssl_context, cert_dir = create_ssl_context()
+            if ssl_context:
+                port = 8443  # Standard HTTPS alternative port
+                is_https = True
+            else:
+                port = 8888  # Fall back to HTTP
+        else:
+            port = 8888
         
         # Find an available port
-        port = 8888
         max_attempts = 10
         for attempt in range(max_attempts):
             try:
@@ -953,8 +1013,18 @@ def start_callback_server() -> int:
         try:
             # Create and start server in a daemon thread
             server = HTTPServer(('localhost', port), CallbackHandler)
+            
+            # Apply SSL context if available
+            if ssl_context:
+                server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
+                protocol = "https"
+                is_https = True
+            else:
+                protocol = "http"
+                is_https = False
+            
             callback_server_instance = server
-            print(f"Callback server starting on port {port}")
+            print(f"Callback server starting on {protocol}://localhost:{port}")
             
             # Create a simple flag to signal when the server is ready
             server_ready = threading.Event()
@@ -963,8 +1033,8 @@ def start_callback_server() -> int:
                 try:
                     # Signal that the server thread has started
                     server_ready.set()
-                    print(f"Callback server is now ready on port {port}")
-                    # Start serving HTTP requests
+                    print(f"Callback server is now ready on {protocol}://localhost:{port}")
+                    # Start serving requests
                     server.serve_forever()
                 except Exception as e:
                     print(f"Server error: {e}")
@@ -972,6 +1042,13 @@ def start_callback_server() -> int:
                     with callback_server_lock:
                         global callback_server_running
                         callback_server_running = False
+                    # Clean up certificate directory if created
+                    if cert_dir and os.path.exists(cert_dir):
+                        import shutil
+                        try:
+                            shutil.rmtree(cert_dir)
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up certificate directory: {e}")
             
             callback_server_thread = threading.Thread(target=server_thread)
             callback_server_thread.daemon = True
@@ -997,16 +1074,19 @@ def start_callback_server() -> int:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.settimeout(2)
                     s.connect(('localhost', port))
-                print(f"Confirmed server is accepting connections on port {port}")
+                print(f"Confirmed server is accepting connections on {protocol}://localhost:{port}")
             except Exception as e:
                 print(f"Warning: Could not verify server connection: {e}")
                 
-            return port
+            return port, is_https
             
         except Exception as e:
             print(f"Error starting callback server: {e}")
-            # Try again with a different port in case of bind issues
-            if "address already in use" in str(e).lower():
+            # Try again with HTTP if HTTPS failed, or with a different port in case of bind issues
+            if use_https and ssl_context:
+                print("HTTPS failed, falling back to HTTP...")
+                return start_callback_server(use_https=False)
+            elif "address already in use" in str(e).lower():
                 print("Port may be in use, trying a different port...")
-                return start_callback_server()  # Recursive call with a new port
+                return start_callback_server(use_https)  # Recursive call with a new port
             raise e 
