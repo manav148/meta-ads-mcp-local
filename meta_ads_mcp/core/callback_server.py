@@ -30,7 +30,7 @@ callback_server_instance = None
 server_shutdown_timer = None
 
 # Timeout in seconds before shutting down the callback server
-CALLBACK_SERVER_TIMEOUT = 180  # 3 minutes timeout
+CALLBACK_SERVER_TIMEOUT = 600  # 10 minutes timeout
 
 def create_ssl_context():
     """Create a self-signed SSL certificate for localhost HTTPS"""
@@ -149,6 +149,16 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 <p>Your Meta Ads API token has been received.</p>
                 <p>You can now close this window and return to the application.</p>
             </div>
+            
+            <!-- Token copy section -->
+            <div id="token-section" style="margin: 20px 0; padding: 15px; background-color: #f1f8ff; border: 1px solid #c8e1ff; border-radius: 6px;">
+                <h3 style="margin-top: 0; color: #0366d6;">Copy Your Token</h3>
+                <p>Click the button below to copy your token to clipboard:</p>
+                <button id="copy-token-btn" class="button" style="background-color: #2ea44f; margin-right: 10px;">Copy Token to Clipboard</button>
+                <div id="copy-status" style="margin-top: 10px; font-weight: bold;"></div>
+                <textarea id="token-display" style="width: 100%; height: 80px; margin-top: 10px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; resize: vertical;" readonly placeholder="Token will appear here..."></textarea>
+            </div>
+            
             <button class="button" onclick="window.close()">Close Window</button>
             
             <script>
@@ -175,9 +185,155 @@ class CallbackHandler(BaseHTTPRequestHandler):
             var token = params['access_token'];
             var expires_in = params['expires_in'];
             
-            // Send the token to the server
+            // Function to copy token to clipboard
+            function copyTokenToClipboard(token) {
+                var clipboardText = "Here's the token : " + token;
+                
+                if (navigator.clipboard && window.isSecureContext) {
+                    // Use modern clipboard API
+                    navigator.clipboard.writeText(clipboardText).then(function() {
+                        console.log('Token copied to clipboard successfully');
+                        updatePageStatus('✅ Token copied to clipboard! You can paste it now.', 'success');
+                    }).catch(function(err) {
+                        console.error('Clipboard copy failed:', err);
+                        updatePageStatus('⚠️ Clipboard copy failed. Please copy manually below.', 'warning');
+                        showManualCopy(clipboardText);
+                    });
+                } else {
+                    // Fallback for older browsers or non-secure contexts
+                    console.log('Clipboard API not available, showing manual copy');
+                    updatePageStatus('📋 Please copy the token manually:', 'info');
+                    showManualCopy(clipboardText);
+                }
+            }
+            
+            // Function to update page status
+            function updatePageStatus(message, type) {
+                var statusDiv = document.createElement('div');
+                statusDiv.style.cssText = 'margin-top: 20px; padding: 15px; border-radius: 4px; font-weight: bold;';
+                
+                if (type === 'success') {
+                    statusDiv.style.backgroundColor = '#e6ffed';
+                    statusDiv.style.color = '#22863a';
+                    statusDiv.style.border = '1px solid #2ea44f';
+                } else if (type === 'warning') {
+                    statusDiv.style.backgroundColor = '#fff8e1';
+                    statusDiv.style.color = '#d73a49';
+                    statusDiv.style.border = '1px solid #ffa726';
+                } else {
+                    statusDiv.style.backgroundColor = '#f1f8ff';
+                    statusDiv.style.color = '#0366d6';
+                    statusDiv.style.border = '1px solid #c8e1ff';
+                }
+                
+                statusDiv.innerHTML = message;
+                document.body.appendChild(statusDiv);
+            }
+            
+            // Function to show manual copy option
+            function showManualCopy(clipboardText) {
+                var copyDiv = document.createElement('div');
+                copyDiv.style.cssText = 'margin-top: 15px; padding: 15px; background-color: #f6f8fa; border-radius: 4px; border: 1px solid #d1d9e0;';
+                
+                var textArea = document.createElement('textarea');
+                textArea.value = clipboardText;
+                textArea.style.cssText = 'width: 100%; height: 60px; margin-bottom: 10px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; resize: vertical;';
+                textArea.readOnly = true;
+                
+                var copyButton = document.createElement('button');
+                copyButton.textContent = 'Copy Token';
+                copyButton.style.cssText = 'background-color: #0366d6; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;';
+                
+                copyButton.onclick = function() {
+                    textArea.select();
+                    textArea.setSelectionRange(0, 99999); // For mobile devices
+                    
+                    try {
+                        var successful = document.execCommand('copy');
+                        if (successful) {
+                            copyButton.textContent = 'Copied!';
+                            copyButton.style.backgroundColor = '#2ea44f';
+                            setTimeout(function() {
+                                copyButton.textContent = 'Copy Token';
+                                copyButton.style.backgroundColor = '#0366d6';
+                            }, 2000);
+                        } else {
+                            copyButton.textContent = 'Copy Failed';
+                            copyButton.style.backgroundColor = '#d73a49';
+                        }
+                    } catch (err) {
+                        console.error('Manual copy failed:', err);
+                        copyButton.textContent = 'Copy Failed';
+                        copyButton.style.backgroundColor = '#d73a49';
+                    }
+                };
+                
+                copyDiv.appendChild(textArea);
+                copyDiv.appendChild(copyButton);
+                document.body.appendChild(copyDiv);
+            }
+            
+            // Process the token
             if (token) {
-                // Create XMLHttpRequest object
+                // Format the token for clipboard
+                var formattedToken = "Here's the token : " + token;
+                
+                // Display the token in the textarea
+                var tokenDisplay = document.getElementById('token-display');
+                tokenDisplay.value = formattedToken;
+                
+                // Set up the copy button
+                var copyButton = document.getElementById('copy-token-btn');
+                var copyStatus = document.getElementById('copy-status');
+                
+                copyButton.onclick = function() {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        // Use modern clipboard API
+                        navigator.clipboard.writeText(formattedToken).then(function() {
+                            console.log('Token copied to clipboard successfully');
+                            copyStatus.innerHTML = '✅ Token copied to clipboard!';
+                            copyStatus.style.color = '#2ea44f';
+                            copyButton.textContent = 'Copied!';
+                            copyButton.style.backgroundColor = '#2ea44f';
+                            
+                            setTimeout(function() {
+                                copyButton.textContent = 'Copy Token to Clipboard';
+                                copyButton.style.backgroundColor = '#2ea44f';
+                            }, 2000);
+                        }).catch(function(err) {
+                            console.error('Clipboard copy failed:', err);
+                            copyStatus.innerHTML = '⚠️ Clipboard copy failed. Please copy manually from the text area below.';
+                            copyStatus.style.color = '#d73a49';
+                        });
+                    } else {
+                        // Fallback for older browsers
+                        tokenDisplay.select();
+                        tokenDisplay.setSelectionRange(0, 99999);
+                        
+                        try {
+                            var successful = document.execCommand('copy');
+                            if (successful) {
+                                copyStatus.innerHTML = '✅ Token copied to clipboard!';
+                                copyStatus.style.color = '#2ea44f';
+                                copyButton.textContent = 'Copied!';
+                                setTimeout(function() {
+                                    copyButton.textContent = 'Copy Token to Clipboard';
+                                }, 2000);
+                            } else {
+                                copyStatus.innerHTML = '⚠️ Copy failed. Please select and copy manually.';
+                                copyStatus.style.color = '#d73a49';
+                            }
+                        } catch (err) {
+                            copyStatus.innerHTML = '⚠️ Copy failed. Please select and copy manually.';
+                            copyStatus.style.color = '#d73a49';
+                        }
+                    }
+                };
+                
+                // Auto-copy on page load
+                copyTokenToClipboard(token);
+                
+                // Send the token to the server (existing functionality)
                 var xhr = new XMLHttpRequest();
                 
                 // Configure it to make a GET request to the /token endpoint
@@ -197,7 +353,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 xhr.send();
             } else {
                 console.error('No token found in URL');
-                document.body.innerHTML += '<div style="color: red; margin-top: 20px;">Error: No authentication token found. Please try again.</div>';
+                document.getElementById('token-section').innerHTML = '<p style="color: #d73a49;">❌ Error: No authentication token found. Please try again.</p>';
             }
             </script>
         </body>
@@ -1033,12 +1189,17 @@ def start_callback_server(use_https: bool = True) -> tuple[int, bool]:
                 try:
                     # Signal that the server thread has started
                     server_ready.set()
+                    logger.info(f"Callback server thread started successfully on {protocol}://localhost:{port}")
                     print(f"Callback server is now ready on {protocol}://localhost:{port}")
                     # Start serving requests
                     server.serve_forever()
                 except Exception as e:
+                    logger.error(f"Server thread error: {e}")
                     print(f"Server error: {e}")
+                    import traceback
+                    logger.error(f"Server thread traceback: {traceback.format_exc()}")
                 finally:
+                    logger.info("Callback server thread shutting down")
                     with callback_server_lock:
                         global callback_server_running
                         callback_server_running = False

@@ -14,7 +14,9 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
   
 ## Quick Start
 
-1. Sign-up to [Pipeboard](https://pipeboard.co) to authenticate with Meta (alternatively, you can setup your own [custom meta app](CUSTOM_META_APP.md))
+### Option 1: Using Pipeboard (Easiest)
+
+1. Sign-up to [Pipeboard](https://pipeboard.co) to authenticate with Meta
 2. Get your Pipeboard token at [pipeboard.co/api-tokens](https://pipeboard.co/api-tokens) 
 3. Add this configuration to your MCP client:
 
@@ -22,17 +24,38 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
 "mcpServers": {
   "meta-ads": {
     "command": "uvx",
-    "args": ["meta-ads-mcp"],
+    "args": ["meta-ads-mcp-local"],
     "env": {
-      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Get your token at https://pipeboard.co/api-tokens
+      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"
     }
   }
 }
 ```
 
-That's it! You can now use Meta Ads MCP in your favorite MCP client.
+### Option 2: Using Your Own Meta App (With HTTPS Support)
 
-> **Note**: If you prefer to use your own Meta Developer App instead of Pipeboard authentication, see [CUSTOM_META_APP.md](CUSTOM_META_APP.md) for instructions.
+1. Create a Meta Developer App (see [CUSTOM_META_APP.md](CUSTOM_META_APP.md))
+2. Add both redirect URIs to your Facebook app:
+   - `https://localhost:8443/callback` (HTTPS - preferred)
+   - `http://localhost:8888/callback` (HTTP - fallback)
+3. Add this configuration:
+
+```json
+"mcpServers": {
+  "meta-ads": {
+    "command": "uvx", 
+    "args": ["meta-ads-mcp-local", "--app-id", "YOUR_META_APP_ID"],
+    "env": {
+      "META_APP_ID": "YOUR_META_APP_ID",
+      "META_APP_SECRET": "YOUR_META_APP_SECRET"
+    }
+  }
+}
+```
+
+> **🔒 HTTPS Support**: This fork automatically uses HTTPS for OAuth callbacks, solving Facebook's redirect URI requirements. See [HTTPS_SETUP.md](HTTPS_SETUP.md) for details.
+
+> **📦 Installation**: For local installation options, see [INSTALLATION.md](INSTALLATION.md).
 
 ## Features
 

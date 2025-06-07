@@ -90,9 +90,16 @@ async def get_login_link(access_token: str = None) -> str:
         # IMPORTANT: Start the callback server first by calling our helper function
         # This ensures the server is ready before we provide the URL to the user
         logger.info("Starting callback server for authentication")
-        port, is_https = start_callback_server()
-        protocol = "https" if is_https else "http"
-        logger.info(f"Callback server started on {protocol}://localhost:{port}")
+        try:
+            port, is_https = start_callback_server()
+            protocol = "https" if is_https else "http"
+            logger.info(f"Callback server started successfully on {protocol}://localhost:{port}")
+            print(f"DEBUG: Callback server started on {protocol}://localhost:{port}")
+        except Exception as e:
+            logger.error(f"Failed to start callback server: {e}")
+            import traceback
+            logger.error(f"Callback server startup traceback: {traceback.format_exc()}")
+            raise
         
         # Generate direct login URL
         auth_manager.redirect_uri = f"{protocol}://localhost:{port}/callback"  # Ensure port is set correctly

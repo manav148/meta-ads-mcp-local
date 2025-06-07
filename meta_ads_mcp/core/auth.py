@@ -24,7 +24,7 @@ from .pipeboard_auth import pipeboard_auth_manager
 
 # Auth constants
 AUTH_SCOPE = "ads_management,ads_read,business_management,public_profile"
-AUTH_REDIRECT_URI = "http://localhost:8888/callback"
+AUTH_REDIRECT_URI = "https://localhost:8443/callback"  # Default to HTTPS, will fallback to HTTP if needed
 AUTH_RESPONSE_TYPE = "token"
 
 # Log important configuration information
@@ -443,6 +443,31 @@ async def get_current_access_token() -> Optional[str]:
         else:
             logger.warning("No valid access token available in auth_manager")
             
+            # MCP SERVER FIX: Check token_container for pending tokens from OAuth callback
+            logger.debug("Checking token_container for OAuth callback tokens...")
+            if token_container.get("token"):
+                logger.info("Found pending token in token_container from OAuth callback - processing automatically")
+                
+                # Automatically process the pending token
+                if process_token_response(token_container):
+                    logger.info("Successfully processed pending OAuth token")
+                    # Clear the token_container to avoid reprocessing
+                    token_container.clear()
+                    token_container.update({"token": None, "expires_in": None, "user_id": None})
+                    
+                    # Now try to get the token again from auth_manager
+                    token = auth_manager.get_access_token()
+                    if token:
+                        logger.info(f"Retrieved processed token from auth_manager (starts with: {token[:10]}...)")
+                        return token
+                    else:
+                        logger.error("Failed to retrieve token from auth_manager after processing")
+                else:
+                    logger.error("Failed to process pending OAuth token")
+                    # Clear the failed token
+                    token_container.clear()
+                    token_container.update({"token": None, "expires_in": None, "user_id": None})
+            
             # Check why token might be missing
             if hasattr(auth_manager, 'token_info') and auth_manager.token_info:
                 if auth_manager.token_info.is_expired():
@@ -480,6 +505,10 @@ def login():
         # Start the callback server first
         port, is_https = start_callback_server()
         
+        # Update redirect URI with the actual port and protocol
+        protocol = "https" if is_https else "http"
+        auth_manager.redirect_uri = f"{protocol}://localhost:{port}/callback"
+        
         # Get the auth URL and open the browser
         auth_url = auth_manager.get_auth_url()
         print(f"Opening browser with URL: {auth_url}")
@@ -494,6 +523,14 @@ def login():
             if token_container["token"]:
                 token = token_container["token"]
                 print("Authentication successful!")
+                
+                # Process and save the token
+                print("Processing and saving token...")
+                if process_token_response(token_container):
+                    print("Token successfully processed and saved!")
+                else:
+                    print("Warning: Token processing failed")
+                
                 # Verify token works by getting basic user info
                 try:
                     from .api import make_api_request
