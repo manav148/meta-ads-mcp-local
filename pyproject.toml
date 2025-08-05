@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "meta-ads-mcp-local"
-version = "0.4.4"
+version = "0.4.5"
 description = "Model Calling Protocol (MCP) plugin for interacting with Meta Ads API (Fork with HTTPS support)"
 readme = "README.md"
 requires-python = ">=3.10"
